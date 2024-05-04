@@ -4,6 +4,23 @@ import { User } from "../models/user.model.js";
 import { uploadoncloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
+const generateaccessandrefreshtoken = async (userid) => {
+  try {
+    const user = await User.findById(userid);
+    const access_token = await user.generateaccesstoken();
+    const refresh_token = await user.generaterefreshtoken();
+    user.refreshToken = refresh_token;
+    await user.save({ validateBeforeSave: false });
+
+    return { access_token, refresh_token };
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "something went wrong while generating refresh and acess token"
+    );
+  }
+};
+
 const registerUser = asyncHandler(async (req, res) => {
   // get userdetails from frontend
   // validation - not empty
@@ -68,4 +85,72 @@ const registerUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, createduser, "User registered successfully"));
 });
 
-export { registerUser };
+const loginUser = asyncHandler(async (req, res) => {
+  //get userdetails
+  //check the details wheather exist in db
+  //password check
+  //generate access and refresh token
+  //send tokens through cookies
+
+  const { email, username, password } = req.body;
+
+  if (!username || !email) {
+    throw new ApiError(400, "Please enter Email or Username");
+  }
+  const user = await User.findOne({ $or: [{ email }, { username }] });
+  if (!user) {
+    throw new ApiError(400, "Please register Email and username");
+  }
+
+  if (!password) {
+    throw new ApiError(400, "Please enter password");
+  }
+  const ispasswordvalid = await user.isPasswordCorrect(password);
+
+  if (!ispasswordvalid) {
+    throw new ApiError(401, "Invalid user credentials");
+  }
+  const { access_token, refresh_token } = await generateaccessandrefreshtoken(
+    user._id
+  );
+  // loggedinuser nikala but uska password and refreshtoken nahi chiaye isliye
+  const loggedInuser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  // accesstoken and refesh token ko cookies m beja hai
+  return res
+    .status(200)
+    .cookie("accessToken", access_token, options)
+    .cookie("refreshToken", refresh_token, options)
+    .json(
+      new ApiResponse(
+        200,
+        { user: loggedInuser, access_token, refresh_token },
+        "user logged in succesfully"
+      )
+    );
+});
+
+const logoutUser = asyncHandler(async (req, res) => {
+  // logout krna hai user ko lekin humare pass kuch data nahi hai ki kis user ko logout krna kyu ki logout ki request k waqt humne info nikalni padegi ab vo token m milega kyu ki jb token banaya tha tb info beji thi usme and vo token humne cookies m beja hai toh ab pehle cookies s token nikalna hai and then token s user info.toh iske liye humne ek middleware banaya hai auth ka.jise req m user dia hai.
+
+  await User.findByIdAndUpdate(req.user._id, {
+    $set: { refreshToken: undefined },
+  });
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+  return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(new ApiResponse(200, {}, "User logged out successfully"));
+});
+
+export { registerUser, loginUser, logoutUser };
