@@ -38,12 +38,12 @@ const Userschema = new Schema(
 
 // pre ek hook hai or we can call it a event . yha p hum userschema ko save krne s pehle ek function run krre hai.
 
-Userschema.pre("save", function (next) {
+Userschema.pre("save", async function (next) {
   if (!this.isModified("password")) {
     // password modify ho tabhi use encrypt krna hai
     return next();
   } else {
-    this.password = bcrypt.hash(this.password, 10);
+    this.password = await bcrypt.hash(this.password, 10);
     next();
   }
 });
