@@ -3,6 +3,7 @@ import { ApiError } from "../utils/APIError.js";
 import { User } from "../models/user.model.js";
 import { uploadoncloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken";
 
 const generateaccessandrefreshtoken = async (userid) => {
   try {
@@ -93,8 +94,9 @@ const loginUser = asyncHandler(async (req, res) => {
   //send tokens through cookies
 
   const { email, username, password } = req.body;
+  console.log(email, username, password);
 
-  if (!username || !email) {
+  if (!username && !email) {
     throw new ApiError(400, "Please enter Email or Username");
   }
   const user = await User.findOne({ $or: [{ email }, { username }] });
@@ -153,4 +155,43 @@ const logoutUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "User logged out successfully"));
 });
 
-export { registerUser, loginUser, logoutUser };
+// ye vala tb chalega jb accesstoken expire hoga and use dubara refresh krvana hai refreshtoken ki help s kyu ki acesstoken ki life km hoti hai or harr barr toh userloggedout nahi hota token expire hone pr vo islie hi session expire nahi hota kyu ki vo bar bar refresh hota hai.
+
+const refreshaccesstoken = asyncHandler(async (req, res) => {
+  const incomingrefreshtoken =
+    req.cookies.refreshToken || req.body.refreshToken;
+  if (!incomingrefreshtoken) {
+    throw new ApiError(401, "Unauthorize request");
+  }
+  const decodedToken = jwt.verify(
+    incomingrefreshtoken,
+    process.env.REFRESH_TOKEN_SECRET
+  );
+  const user = User.findById(decodedToken._id);
+
+  if (user && User.refreshToken !== incomingrefreshtoken) {
+    throw new ApiError(401, "Refresh token is expired");
+  }
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  const { access_token, refresh_token } = await generateaccessandrefreshtoken(
+    user._id
+  );
+
+  return res
+    .status(201)
+    .cookie("accessToken", access_token, options)
+    .cookie("refreshToken", refresh_token, options)
+    .json(
+      new ApiResponse(
+        200,
+        { access_token, refresh_token },
+        "access token refreshed"
+      )
+    );
+});
+
+export { registerUser, loginUser, logoutUser, refreshaccesstoken };

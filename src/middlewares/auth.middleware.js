@@ -7,7 +7,7 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
   try {
     // pehle token get kro cookies s ya header m bearer token hota hai vha s
     const token =
-      !req.cookies?.accessToken ||
+      req.cookies?.accessToken ||
       req.header("Authorization")?.replace("Bearer ", "");
     if (!token) {
       throw new ApiError(400, "Unauthorize request");
