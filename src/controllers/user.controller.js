@@ -217,7 +217,7 @@ const getcurrentuser = asyncHandler(async (req, res) => {
 
 const updateaccountdetails = asyncHandler(async (req, res) => {
   const { fullname, email } = req.body;
-  const updateduser = User.findByIdAndUpdate(
+  const updateduser = await User.findByIdAndUpdate(
     req.user?._id,
     { $set: { fullname, email } },
     { new: true }
@@ -248,6 +248,70 @@ const userAvatar = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, user, "User updated successfully"));
 });
 
+const getUserchannelprofile = asyncHandler(async (req, res) => {
+  const { username } = req.params;
+  if (!username?.trim()) {
+    throw new ApiError(400, "username is missing");
+  }
+  // aggregate pipelines hum likhte hai dusre table s data nikalne k liye kisi condition k base par.
+  // $match: pehle match krvaya ek user ko db m
+  // lookup ka mtlb left join join krte waqt kuch cond dete hai na jiske base pr join krte hai toh vo kia.
+  //ex:- https://www.w3schools.com/mongodb/mongodb_aggregations_lookup.php
+  9;
+
+  const channel = await User.aggregate([
+    {
+      $match: {
+        username: username?.toLowerCase(),
+      },
+    },
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "channel",
+        as: "subscribers",
+      },
+    },
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "subscriber",
+        as: "subscribedTo",
+      },
+    },
+    {
+      $addFields: {
+        subscribersCount: {
+          $size: "$subscribers",
+        },
+        channelsSubscribedToCount: {
+          $size: "$subscribedTo",
+        },
+        issubscribed: {
+          $cond: {
+            if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        fullname: 1,
+        username: 1,
+        avatar: 1,
+        email: 1,
+        subscribersCount: 1,
+        channelsSubscribedToCount: 1,
+        issubscribed: 1,
+      },
+    },
+  ]);
+});
+
 export {
   registerUser,
   loginUser,
@@ -257,4 +321,5 @@ export {
   getcurrentuser,
   updateaccountdetails,
   userAvatar,
+  getUserchannelprofile,
 };
